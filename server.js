@@ -14,7 +14,7 @@ const port = process.env.PORT || 3000
 
 // Configurar Mercado Pago
 mercadopago.configure({
-  access_token: process.env.MP_ACCESS_TOKEN,
+  access_token: process.env.MP_ACCESS_TOKEN || "APP_USR-8437685954820574-061217-73536ca82884e3729ccde2b178147a8e-471922700",
 })
 
 // Middleware
@@ -450,22 +450,32 @@ app.post("/api/crear-preferencia-premium", authenticateToken, async (req, res) =
     if (req.user.isPremium) {
       return res.status(400).json({ error: "El usuario ya es premium" })
     }
-
+   const {
+    nombreComprador,
+    apellidoComprador,
+    emailComprador
+   } = req.body;
     // Crear preferencia de pago
     const preference = {
+      
       items: [
         {
           title: "Plan Premium RedactaFácil",
-          unit_price: 5,
+          unit_price: 200,
           quantity: 1,
           currency_id: "UYU",
           description: "Acceso a 100 generaciones mensuales y todas las funciones premium",
         },
       ],
+       payer: {
+      name: nombreComprador,
+      surname: apellidoComprador,
+      email: emailComprador
+     },
       back_urls: {
-        success: "https://redactafacil.onrender.com/success.html",
-        failure: "https://redactafacil.onrender.com/failure.html",
-        pending: "https://redactafacil.onrender.com/pending.html",
+        success: "https://redacta-facil.vercel.app/success.html",
+        failure: "https://redacta-facil.vercel.app/failure.html",
+        pending: "https://redacta-facil.vercel.app/pending.html",
       },
       auto_return: "approved",
       external_reference: req.user._id.toString(),
