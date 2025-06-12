@@ -435,7 +435,9 @@ app.get("/api/letters/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
-
+app.get("/healthz", (req, res) => {
+  res.send("OK");
+});
 // Actualizar usuario a premium (simulado)
 app.post("/api/upgrade-premium", authenticateToken, async (req, res) => {
   try {
