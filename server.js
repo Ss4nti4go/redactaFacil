@@ -126,7 +126,9 @@ app.get('/api/verificar-pago/:userId', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Error al verificar estado de pago' });
   }
 });
-
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
 // Ruta para actualizar a premium manualmente (solo para pruebas)
 app.post('/api/upgrade-premium', verifyToken, async (req, res) => {
   try {
