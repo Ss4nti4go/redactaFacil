@@ -456,7 +456,7 @@ app.post("/api/crear-preferencia-premium", authenticateToken, async (req, res) =
       items: [
         {
           title: "Plan Premium RedactaFácil",
-          unit_price: 1999,
+          unit_price: 230,
           quantity: 1,
           currency_id: "UYU",
           description: "Acceso a 100 generaciones mensuales y todas las funciones premium",
