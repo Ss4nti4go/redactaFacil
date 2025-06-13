@@ -551,7 +551,7 @@ Usa un tono profesional y claro. No uses lenguaje genérico.`
     res.json({
       carta,
       usage: {
-        limit: req.user.isPremium ? 100 : 3,
+        limit: req.user.isPremium ? 100 : 7,
         used: req.user.isPremium ? req.user.usage.monthlyCount : req.user.usage.weeklyCount,
         period: req.user.isPremium ? "mensual" : "semanal",
       },
@@ -610,7 +610,7 @@ app.post("/api/crear-preferencia-premium", authenticateToken, checkVerified, asy
       items: [
         {
           title: descripcion || "Plan Premium RedactaFácil",
-          unit_price: 1,
+          unit_price: 230,
           quantity: 1,
           currency_id: "UYU",
           description: "Acceso a 100 generaciones mensuales y todas las funciones premium",
