@@ -8,13 +8,24 @@ const jwt = require("jsonwebtoken")
 const OpenAI = require("openai")
 const mercadopago = require("mercadopago")
 const path = require("path")
+const nodemailer = require("nodemailer")
+const crypto = require("crypto")
 
 const app = express()
 const port = process.env.PORT || 3000
 
 // Configurar Mercado Pago
 mercadopago.configure({
-  access_token: process.env.MP_ACCESS_TOKEN || "APP_USR-8437685954820574-061217-73536ca82884e3729ccde2b178147a8e-471922700",
+  access_token: process.env.MP_ACCESS_TOKEN,
+})
+
+// Configurar Nodemailer para envío de emails
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER || "s4359391@gmail.com", // Reemplazar con tu email real
+    pass: process.env.EMAIL_PASSWORD || "aumh uacw hhiv lngr", // Reemplazar con tu contraseña real o app password
+  },
 })
 
 // Middleware
@@ -90,6 +101,18 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  verificationCode: {
+    type: String,
+    default: null,
+  },
+  verificationCodeExpires: {
+    type: Date,
+    default: null,
+  },
 })
 
 // Esquema de Carta Generada
@@ -153,6 +176,17 @@ const authenticateToken = async (req, res, next) => {
   } catch (error) {
     return res.status(403).json({ error: "Token inválido" })
   }
+}
+
+// Middleware para verificar si el usuario está verificado
+const checkVerified = async (req, res, next) => {
+  if (!req.user.isVerified) {
+    return res.status(403).json({
+      error: "Cuenta no verificada",
+      message: "Por favor, verifica tu cuenta de correo electrónico antes de continuar.",
+    })
+  }
+  next()
 }
 
 // Función para verificar y resetear límites
@@ -219,6 +253,42 @@ const checkUsageLimits = async (req, res, next) => {
   }
 }
 
+// Función para generar código de verificación
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString() // Código de 6 dígitos
+}
+
+// Función para enviar email de verificación
+const sendVerificationEmail = async (email, code) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER || "redactafacil@gmail.com",
+    to: email,
+    subject: "Verifica tu cuenta en RedactaFácil",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+        <h2 style="color: #6366f1; text-align: center;">¡Bienvenido a RedactaFácil!</h2>
+        <p>Gracias por registrarte. Para verificar tu cuenta, ingresa el siguiente código en la aplicación:</p>
+        <div style="background-color: #f8fafc; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+          <h1 style="font-size: 32px; letter-spacing: 5px; margin: 0; color: #1e293b;">${code}</h1>
+        </div>
+        <p>Este código expirará en 30 minutos.</p>
+        <p>Si no solicitaste este código, puedes ignorar este mensaje.</p>
+        <p style="margin-top: 30px; font-size: 12px; color: #64748b; text-align: center;">
+          © 2024 RedactaFácil. Todos los derechos reservados.
+        </p>
+      </div>
+    `,
+  }
+
+  try {
+    await transporter.sendMail(mailOptions)
+    return true
+  } catch (error) {
+    console.error("Error enviando email:", error)
+    return false
+  }
+}
+
 // RUTAS DE AUTENTICACIÓN
 
 // Registro de usuario
@@ -245,14 +315,24 @@ app.post("/api/auth/register", async (req, res) => {
     const saltRounds = 10
     const hashedPassword = await bcrypt.hash(password, saltRounds)
 
+    // Generar código de verificación
+    const verificationCode = generateVerificationCode()
+    const verificationCodeExpires = new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
+
     // Crear usuario
     const user = new User({
       name,
       email,
       password: hashedPassword,
+      verificationCode,
+      verificationCodeExpires,
+      isVerified: false,
     })
 
     await user.save()
+
+    // Enviar email de verificación
+    const emailSent = await sendVerificationEmail(email, verificationCode)
 
     // Generar token JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" })
@@ -265,11 +345,81 @@ app.post("/api/auth/register", async (req, res) => {
         name: user.name,
         email: user.email,
         isPremium: user.isPremium,
+        isVerified: user.isVerified,
+        usage: user.usage,
+      },
+      verificationEmailSent: emailSent,
+    })
+  } catch (error) {
+    console.error("Error en registro:", error)
+    res.status(500).json({ error: "Error interno del servidor" })
+  }
+})
+
+// Verificar código
+app.post("/api/auth/verify", authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.body
+    const user = req.user
+
+    if (!code) {
+      return res.status(400).json({ error: "El código de verificación es requerido" })
+    }
+
+    // Verificar si el código es válido y no ha expirado
+    if (user.verificationCode !== code || !user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
+      return res.status(400).json({ error: "Código de verificación inválido o expirado" })
+    }
+
+    // Marcar usuario como verificado
+    user.isVerified = true
+    user.verificationCode = null
+    user.verificationCodeExpires = null
+    await user.save()
+
+    res.json({
+      message: "Cuenta verificada exitosamente",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isPremium: user.isPremium,
+        isVerified: user.isVerified,
         usage: user.usage,
       },
     })
   } catch (error) {
-    console.error("Error en registro:", error)
+    console.error("Error en verificación:", error)
+    res.status(500).json({ error: "Error interno del servidor" })
+  }
+})
+
+// Reenviar código de verificación
+app.post("/api/auth/resend-code", authenticateToken, async (req, res) => {
+  try {
+    const user = req.user
+
+    if (user.isVerified) {
+      return res.status(400).json({ error: "La cuenta ya está verificada" })
+    }
+
+    // Generar nuevo código de verificación
+    const verificationCode = generateVerificationCode()
+    const verificationCodeExpires = new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
+
+    user.verificationCode = verificationCode
+    user.verificationCodeExpires = verificationCodeExpires
+    await user.save()
+
+    // Enviar email de verificación
+    const emailSent = await sendVerificationEmail(user.email, verificationCode)
+
+    res.json({
+      message: "Código de verificación reenviado",
+      verificationEmailSent: emailSent,
+    })
+  } catch (error) {
+    console.error("Error al reenviar código:", error)
     res.status(500).json({ error: "Error interno del servidor" })
   }
 })
@@ -314,6 +464,7 @@ app.post("/api/auth/login", async (req, res) => {
         name: updatedUser.name,
         email: updatedUser.email,
         isPremium: updatedUser.isPremium,
+        isVerified: updatedUser.isVerified,
         usage: updatedUser.usage,
       },
     })
@@ -334,6 +485,7 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
         name: user.name,
         email: user.email,
         isPremium: user.isPremium,
+        isVerified: user.isVerified,
         usage: user.usage,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
@@ -353,7 +505,7 @@ app.get("/api/status", (req, res) => {
 // RUTAS DE CARTAS
 
 // Generar carta (protegida y con límites)
-app.post("/api/generar-carta", authenticateToken, checkUsageLimits, async (req, res) => {
+app.post("/api/generar-carta", authenticateToken, checkVerified, checkUsageLimits, async (req, res) => {
   try {
     const { tipo, nombre, empresa, cargo, motivo, fechas } = req.body
 
@@ -411,7 +563,7 @@ Usa un tono profesional y claro. No uses lenguaje genérico.`
 })
 
 // Obtener historial de cartas del usuario
-app.get("/api/letters/history", authenticateToken, async (req, res) => {
+app.get("/api/letters/history", authenticateToken, checkVerified, async (req, res) => {
   try {
     const letters = await Letter.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(10)
 
@@ -423,7 +575,7 @@ app.get("/api/letters/history", authenticateToken, async (req, res) => {
 })
 
 // Obtener una carta específica
-app.get("/api/letters/:id", authenticateToken, async (req, res) => {
+app.get("/api/letters/:id", authenticateToken, checkVerified, async (req, res) => {
   try {
     const letter = await Letter.findOne({
       _id: req.params.id,
@@ -444,42 +596,39 @@ app.get("/api/letters/:id", authenticateToken, async (req, res) => {
 // RUTAS DE MERCADO PAGO
 
 // Crear preferencia de pago para Premium
-app.post("/api/crear-preferencia-premium", authenticateToken, async (req, res) => {
+app.post("/api/crear-preferencia-premium", authenticateToken, checkVerified, async (req, res) => {
   try {
     // Si ya es premium, no permitir crear otra preferencia
     if (req.user.isPremium) {
       return res.status(400).json({ error: "El usuario ya es premium" })
     }
-   const {
-    nombreComprador,
-    apellidoComprador,
-    emailComprador
-   } = req.body;
+
+    const { descripcion, nombreComprador, apellidoComprador, emailComprador } = req.body
+
     // Crear preferencia de pago
     const preference = {
-      
       items: [
         {
-          title: "Plan Premium RedactaFácil",
-          unit_price: 200,
+          title: descripcion || "Plan Premium RedactaFácil",
+          unit_price: 1999,
           quantity: 1,
           currency_id: "UYU",
           description: "Acceso a 100 generaciones mensuales y todas las funciones premium",
         },
       ],
-       payer: {
-      name: nombreComprador,
-      surname: apellidoComprador,
-      email: emailComprador
-     },
       back_urls: {
-        success: "https://redacta-facil.vercel.app/success.html",
-        failure: "https://redacta-facil.vercel.app/failure.html",
-        pending: "https://redacta-facil.vercel.app/pending.html",
+        success: "https://redactafacil.onrender.com/success.html",
+        failure: "https://redactafacil.onrender.com/failure.html",
+        pending: "https://redactafacil.onrender.com/pending.html",
       },
       auto_return: "approved",
       external_reference: req.user._id.toString(),
       notification_url: "https://redactafacil.onrender.com/api/webhook-mp",
+      payer: {
+        name: nombreComprador || req.user.name.split(" ")[0],
+        surname: apellidoComprador || req.user.name.split(" ")[1] || "",
+        email: emailComprador || req.user.email,
+      },
     }
 
     const response = await mercadopago.preferences.create(preference)
