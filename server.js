@@ -610,16 +610,16 @@ app.post("/api/crear-preferencia-premium", authenticateToken, checkVerified, asy
       items: [
         {
           title: descripcion || "Plan Premium RedactaFácil",
-          unit_price: 1999,
+          unit_price: 1,
           quantity: 1,
           currency_id: "UYU",
           description: "Acceso a 100 generaciones mensuales y todas las funciones premium",
         },
       ],
       back_urls: {
-        success: "https://redactafacil.onrender.com/success.html",
-        failure: "https://redactafacil.onrender.com/failure.html",
-        pending: "https://redactafacil.onrender.com/pending.html",
+        success: "https://redacta-facil.vercel.app/success.html",
+        failure: "https://redacta-facil.vercel.app/failure.html",
+        pending: "https://redacta-facil.vercel.app/pending.html",
       },
       auto_return: "approved",
       external_reference: req.user._id.toString(),
