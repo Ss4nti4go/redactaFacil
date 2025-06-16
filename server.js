@@ -617,9 +617,9 @@ app.post("/api/crear-preferencia-premium", authenticateToken, checkVerified, asy
         },
       ],
       back_urls: {
-        success: "https://redacta-facil.vercel.app/success.html",
-        failure: "https://redacta-facil.vercel.app/failure.html",
-        pending: "https://redacta-facil.vercel.app/pending.html",
+        success: "https://www.redactafacil.com/success.html",
+        failure: "https://www.redactafacil.com/failure.html",
+        pending: "https://www.redactafacil.com/pending.html",
       },
       auto_return: "approved",
       external_reference: req.user._id.toString(),
