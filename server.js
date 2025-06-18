@@ -30,6 +30,23 @@ const transporter = nodemailer.createTransport({
 
 // Middleware
 app.use(cors())
+// Bloquear rutas peligrosas o sospechosas
+const blockedPaths = [
+  "/wp-admin",
+  "/wp-admin/setup-config.php",
+  "/wordpress/wp-admin/setup-config.php",
+  "/.env",
+  "/.git",
+  "/js/script.js", // si querés bloquear esto también
+];
+
+app.use((req, res, next) => {
+  if (blockedPaths.includes(req.path)) {
+    console.warn(`❌ Intento de acceso bloqueado a: ${req.path}`);
+    return res.status(403).send("Acceso denegado");
+  }
+  next();
+});
 app.use(bodyParser.json())
 app.use(express.static(path.join(__dirname, "front")))
 
